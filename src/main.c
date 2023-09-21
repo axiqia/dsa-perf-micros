@@ -761,6 +761,17 @@ err_ret:
 	return err;
 }
 
+static void recover(int sig, siginfo_t *si, void *v)
+{
+	printf("signal %d code %d addr %p v %p\n", sig, si->si_code, si->si_addr, v);
+	exit(-1);
+}
+
+struct sigaction recover_act = {
+	.sa_sigaction = recover,
+	.sa_flags = SA_SIGINFO,
+};
+
 int
 main(int argc, char **argv)
 {
@@ -809,6 +820,8 @@ main(int argc, char **argv)
 		goto err_ret;
 
 	print_tcfg(&tcfg);
+
+	sigaction(SIGBUS, &recover_act, NULL);
 
 	err = test_run(&tcfg);
 	if (err) {

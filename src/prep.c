@@ -20,6 +20,43 @@ uint16_t dif_block_len(uint8_t idx)
 	return bl_tbl[idx];
 }
 
+#define EINJ_ETYPE "/sys/kernel/debug/apei/einj/error_type"
+#define EINJ_ETYPE_AVAILABLE "/sys/kernel/debug/apei/einj/available_error_type"
+#define EINJ_ADDR "/sys/kernel/debug/apei/einj/param1"
+#define EINJ_MASK "/sys/kernel/debug/apei/einj/param2"
+#define EINJ_APIC "/sys/kernel/debug/apei/einj/param3"
+#define EINJ_SBDF "/sys/kernel/debug/apei/einj/param4"
+#define EINJ_FLAGS "/sys/kernel/debug/apei/einj/flags"
+#define EINJ_NOTRIGGER "/sys/kernel/debug/apei/einj/notrigger"
+#define EINJ_DOIT "/sys/kernel/debug/apei/einj/error_inject"
+#define EINJ_VENDOR "/sys/kernel/debug/apei/einj/vendor"
+
+static void wfile(const char *file, unsigned long long val)
+{
+	FILE *fp;
+
+	fp = fopen(file, "w");
+	if (fp == NULL) {
+		fprintf(stderr, "cannot open '%s'\n", file);
+		exit(1);
+	}
+	fprintf(fp, "0x%llx\n", val);
+	if (fclose(fp) == EOF) {
+		fprintf(stderr, "write error on '%s'\n", file);
+		exit(1);
+	}
+}
+
+static void inject_mem_uc(unsigned long long paddr, int notrigger)
+{
+	wfile(EINJ_ETYPE, 0x10);
+	wfile(EINJ_ADDR, paddr);
+	wfile(EINJ_MASK, ~0x0ul);
+	wfile(EINJ_FLAGS, 2);
+	wfile(EINJ_NOTRIGGER, notrigger);
+	wfile(EINJ_DOIT, 1);
+}
+
 static void
 init_memmove_desc_addr(struct tcfg_cpu *tcpu, int begin, int count)
 {
@@ -28,8 +65,20 @@ init_memmove_desc_addr(struct tcfg_cpu *tcpu, int begin, int count)
 	int i;
 
 	for (i = 0; i < count; i++, d++) {
+		char *src_vaddr = tcpu->src + off;
+		char *dst_vaddr = tcpu->dst + off;
 		d->src_addr = rte_mem_virt2iova(tcpu->src + off);
 		d->dst_addr = rte_mem_virt2iova(tcpu->dst + off);
+
+		fprintf(stdout, "src_vaddr:\t\t %p\n", src_vaddr);
+		fprintf(stdout, "dst_vaddr:\t\t %p\n", dst_vaddr);
+		fprintf(stdout, "src_paddr:\t\t 0x%lx\n", d->src_addr);
+		fprintf(stdout, "dst_paddr:\t\t 0x%lx\n", d->dst_addr);
+
+		inject_mem_uc(d->src_addr, 1);
+		// /* invaild cache first*/
+		asm volatile("clflush %0" : "+m" (*src_vaddr));
+		//__builtin_prefetch(src_vaddr, 0, 3);
 		off = off + tcpu->tcfg->bstride;
 	}
 }

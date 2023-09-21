@@ -109,5 +109,6 @@ driver_init(struct tcfg *tcfg)
 
 uint64_t rte_mem_virt2iova(void *p)
 {
-	return dd == IDXD ? (uint64_t)p : user_virt2iova(p);
+	//return dd == IDXD ? (uint64_t)p : user_virt2iova(p);
+	return user_virt2iova(p);
 }
